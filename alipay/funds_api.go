@@ -170,25 +170,17 @@ func (a *Client) FundAuthOrderVoucherCreate(bm gopay.BodyMap) (aliRsp *FundAuthO
 
 // alipay.fund.auth.order.app.freeze(线上资金授权冻结接口)
 // 文档地址: https://opendocs.alipay.com/apis/api_28/alipay.fund.auth.order.app.freeze
-func (a *Client) FundAuthOrderAppFreeze(bm gopay.BodyMap) (aliRsp *FundAuthOrderAppFreezeResponse, err error) {
+func (a *Client) FundAuthOrderAppFreeze(bm gopay.BodyMap) (payParam string, err error) {
 	err = bm.CheckEmptyError("out_order_no", "out_request_no", "order_title", "amount", "product_code")
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	var bs []byte
 	if bs, err = a.doAliPay(bm, "alipay.fund.auth.order.app.freeze"); err != nil {
-		return nil, err
+		return "", err
 	}
-	aliRsp = new(FundAuthOrderAppFreezeResponse)
-	if err = json.Unmarshal(bs, aliRsp); err != nil {
-		return nil, err
-	}
-	if aliRsp.Response != nil && aliRsp.Response.Code != "10000" {
-		info := aliRsp.Response
-		return nil, fmt.Errorf(`{"code":"%s","msg":"%s","sub_code":"%s","sub_msg":"%s"}`, info.Code, info.Msg, info.SubCode, info.SubMsg)
-	}
-	aliRsp.SignData = getSignData(bs)
-	return aliRsp, nil
+	payParam = string(bs)
+	return payParam, nil
 }
 
 // alipay.fund.auth.order.unfreeze(资金授权解冻接口)
@@ -222,6 +214,98 @@ func (a *Client) FundAuthOperationDetailQuery(bm gopay.BodyMap) (aliRsp *FundAut
 		return nil, err
 	}
 	aliRsp = new(FundAuthOperationDetailQueryResponse)
+	if err = json.Unmarshal(bs, aliRsp); err != nil {
+		return nil, err
+	}
+	if aliRsp.Response != nil && aliRsp.Response.Code != "10000" {
+		info := aliRsp.Response
+		return nil, fmt.Errorf(`{"code":"%s","msg":"%s","sub_code":"%s","sub_msg":"%s"}`, info.Code, info.Msg, info.SubCode, info.SubMsg)
+	}
+	aliRsp.SignData = getSignData(bs)
+	return aliRsp, nil
+}
+
+// alipay.fund.auth.operation.cancel(资金授权撤销接口)
+// 文档地址: https://opendocs.alipay.com/apis/api_28/alipay.fund.auth.operation.cancel
+func (a *Client) FundAuthOperationCancel(bm gopay.BodyMap) (aliRsp *FundAuthOperationCancelResponse, err error) {
+	err = bm.CheckEmptyError("remark")
+	if err != nil {
+		return nil, err
+	}
+	var bs []byte
+	if bs, err = a.doAliPay(bm, "alipay.fund.auth.operation.cancel"); err != nil {
+		return nil, err
+	}
+	aliRsp = new(FundAuthOperationCancelResponse)
+	if err = json.Unmarshal(bs, aliRsp); err != nil {
+		return nil, err
+	}
+	if aliRsp.Response != nil && aliRsp.Response.Code != "10000" {
+		info := aliRsp.Response
+		return nil, fmt.Errorf(`{"code":"%s","msg":"%s","sub_code":"%s","sub_msg":"%s"}`, info.Code, info.Msg, info.SubCode, info.SubMsg)
+	}
+	aliRsp.SignData = getSignData(bs)
+	return aliRsp, nil
+}
+
+// alipay.fund.batch.create(批次下单接口)
+// 文档地址: https://opendocs.alipay.com/apis/api_28/alipay.fund.batch.create
+func (a *Client) FundBatchCreate(bm gopay.BodyMap) (aliRsp *FundBatchCreateResponse, err error) {
+	err = bm.CheckEmptyError("out_batch_no", "product_code", "biz_scene", "order_title", "total_trans_amount", "total_count", "trans_order_list")
+	if err != nil {
+		return nil, err
+	}
+	var bs []byte
+	if bs, err = a.doAliPay(bm, "alipay.fund.batch.create"); err != nil {
+		return nil, err
+	}
+	aliRsp = new(FundBatchCreateResponse)
+	if err = json.Unmarshal(bs, aliRsp); err != nil {
+		return nil, err
+	}
+	if aliRsp.Response != nil && aliRsp.Response.Code != "10000" {
+		info := aliRsp.Response
+		return nil, fmt.Errorf(`{"code":"%s","msg":"%s","sub_code":"%s","sub_msg":"%s"}`, info.Code, info.Msg, info.SubCode, info.SubMsg)
+	}
+	aliRsp.SignData = getSignData(bs)
+	return aliRsp, nil
+}
+
+// alipay.fund.batch.close(批量转账关单接口)
+// 文档地址: https://opendocs.alipay.com/apis/api_28/alipay.fund.batch.close
+func (a *Client) FundBatchClose(bm gopay.BodyMap) (aliRsp *FundBatchCloseResponse, err error) {
+	err = bm.CheckEmptyError("biz_scene")
+	if err != nil {
+		return nil, err
+	}
+	var bs []byte
+	if bs, err = a.doAliPay(bm, "alipay.fund.batch.close"); err != nil {
+		return nil, err
+	}
+	aliRsp = new(FundBatchCloseResponse)
+	if err = json.Unmarshal(bs, aliRsp); err != nil {
+		return nil, err
+	}
+	if aliRsp.Response != nil && aliRsp.Response.Code != "10000" {
+		info := aliRsp.Response
+		return nil, fmt.Errorf(`{"code":"%s","msg":"%s","sub_code":"%s","sub_msg":"%s"}`, info.Code, info.Msg, info.SubCode, info.SubMsg)
+	}
+	aliRsp.SignData = getSignData(bs)
+	return aliRsp, nil
+}
+
+// alipay.fund.batch.detail.query(批量转账明细查询接口)
+// 文档地址: https://opendocs.alipay.com/apis/api_28/alipay.fund.batch.detail.query
+func (a *Client) FundBatchDetailQuery(bm gopay.BodyMap) (aliRsp *FundBatchDetailQueryResponse, err error) {
+	err = bm.CheckEmptyError("biz_scene")
+	if err != nil {
+		return nil, err
+	}
+	var bs []byte
+	if bs, err = a.doAliPay(bm, "alipay.fund.batch.detail.query"); err != nil {
+		return nil, err
+	}
+	aliRsp = new(FundBatchDetailQueryResponse)
 	if err = json.Unmarshal(bs, aliRsp); err != nil {
 		return nil, err
 	}

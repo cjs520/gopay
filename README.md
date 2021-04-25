@@ -10,13 +10,7 @@
 [![GitHub Release](https://img.shields.io/github/v/release/iGoogle-ink/gopay)](https://github.com/iGoogle-ink/gopay/releases)
 [![License](https://img.shields.io/github/license/iGoogle-ink/gopay)](https://www.apache.org/licenses/LICENSE-2.0)
 
---- 
-## ★招聘广告★：
-有意向的请直接加我微信（文档说明处有我的微信二维码）
-- 公司：上海商米科技集团股份有限公司
-- 要求：3-5年后端工程师（Golang）
-- 地点：上海市杨浦区五角场
---- 
+---
 
 # 一、安装
 
@@ -41,9 +35,76 @@ func main() {
 
 ---
 
-### 微信支付V2 API（现已支持V3接口，推荐使用V3接口，使用方法参考下面介绍或源码）
+### 微信支付V3 API
 
-> #### 希望有时间的伙伴儿Fork完后，积极提Pull Request，一起完善微信各个类别下的接口到相应的go文件中
+> #### 推荐使用V3接口，官方在V3接口实现未覆盖或gopay未开发的接口，还继续用V2接口，欢迎参与完善V3接口。
+
+* <font color='#07C160' size='4'>基础支付（直连模式）</font>
+    * APP下单：client.V3TransactionApp()
+    * JSAPI/小程序下单：client.V3TransactionJsapi()
+    * Native下单：client.V3TransactionNative()
+    * H5下单：client.V3TransactionH5()
+    * 查询订单：client.V3TransactionQueryOrder()
+    * 关闭订单：client.V3TransactionCloseOrder()
+* <font color='#07C160' size='4'>基础支付（服务商模式）</font>
+    * APP下单：client.V3PartnerTransactionApp()
+    * JSAPI/小程序下单：client.V3PartnerTransactionJsapi()
+    * Native下单：client.V3PartnerTransactionNative()
+    * H5下单：client.V3PartnerTransactionH5()
+    * 查询订单：client.V3PartnerQueryOrder()
+    * 关闭订单：client.V3PartnerCloseOrder()
+* <font color='#07C160' size='4'>合单支付</font>
+    * 合单APP下单：client.V3CombineTransactionApp()
+    * 合单JSAPI/小程序下单：client.V3CombineTransactionJsapi()
+    * 合单Native下单：client.V3CombineTransactionNative()
+    * 合单H5下单：client.V3CombineTransactionH5()
+    * 合单查询订单：client.V3CombineQueryOrder()
+    * 合单关闭订单：client.V3CombineCloseOrder()
+* <font color='#07C160' size='4'>退款</font>
+    * 申请退款：client.V3Refund()
+    * 查询单笔退款：client.V3RefundQuery()
+* <font color='#07C160' size='4'>账单</font>
+    * 申请交易账单：client.V3BillTradeBill()
+    * 申请资金账单：client.V3BillFundFlowBill()
+    * 申请二级商户资金账单：client.V3BillLevel2FundFlowBill()
+    * 下载账单：client.V3BillDownLoadBill()
+* <font color='#07C160' size='4'>微信支付分（公共API）</font>
+    * 创建支付分订单：client.V3ScoreOrderCreate()
+    * 查询支付分订单：client.V3ScoreOrderQuery()
+    * 取消支付分订单：client.V3ScoreOrderCancel()
+    * 修改订单金额：client.V3ScoreOrderModify()
+    * 完结支付分订单：client.V3ScoreOrderComplete()
+    * 商户发起催收扣款：client.V3ScoreOrderPay()
+    * 同步服务订单信息：client.V3ScoreOrderSync()
+* <font color='#07C160' size='4'>微信支付分（免确认模式）</font>
+    * 待实现
+* <font color='#07C160' size='4'>微信支付分（免确认预授权模式）</font>
+    * 待实现  
+* <font color='#07C160' size='4'>微信先享卡</font>
+    * 待实现
+* <font color='#07C160' size='4'>支付即服务</font>
+    * 待实现
+* <font color='#07C160' size='4'>智慧商圈</font>
+    * 待实现
+* <font color='#07C160' size='4'>代金券</font>
+    * 待实现
+* <font color='#07C160' size='4'>商家券</font>
+    * 待实现
+* <font color='#07C160' size='4'>委托营销</font>
+    * 待实现
+* <font color='#07C160' size='4'>消费卡</font>
+    * 待实现
+* <font color='#07C160' size='4'>支付有礼</font>
+    * 待实现
+* <font color='#07C160' size='4'>消费者投诉2.0</font>
+    * 待实现
+* <font color='#07C160' size='4'>其他能力</font>
+    * 图片上传（营销专用）：
+    * 图片上传：
+    * 视频上传：
+### 微信支付V2 API
+
+> #### 推荐使用V3接口，官方在V3接口实现未覆盖或gopay未开发的接口，还继续用V2接口。
 
 * 统一下单：client.UnifiedOrder()
     * JSAPI - JSAPI支付（或小程序支付）
@@ -142,40 +203,50 @@ func main() {
 > #### 希望有时间的伙伴儿Fork完后，积极提Pull Request，一起完善支付宝各个类别下的接口到相应的go文件中
 
 * 支付宝接口自行实现方法：client.PostAliPayAPISelfV2()
-* 手机网站支付接口2.0（手机网站支付）：client.TradeWapPay()
-* 统一收单下单并支付页面接口（电脑网站支付）：client.TradePagePay()
-* APP支付接口2.0（APP支付）：client.TradeAppPay()
-* 统一收单交易支付接口（商家扫用户付款码）：client.TradePay()
-* 统一收单交易创建接口（小程序支付）：client.TradeCreate()
-* 统一收单线下交易查询：client.TradeQuery()
-* 统一收单交易关闭接口：client.TradeClose()
-* 统一收单交易撤销接口：client.TradeCancel()
-* 统一收单交易退款接口：client.TradeRefund()
-* 统一收单退款页面接口：client.TradePageRefund()
-* 统一收单交易退款查询：client.TradeFastPayRefundQuery()
-* 统一收单交易结算接口：client.TradeOrderSettle()
-* 统一收单线下交易预创建（用户扫商品收款码）：client.TradePrecreate()
-* 单笔转账接口：client.FundTransUniTransfer()
-* 查询转账订单接口: client.FundTransOrderQuery()
-* 支付宝资金账户资产查询接口：client.FundAccountQuery()
-* 转账业务单据查询接口：client.FundTransCommonQuery()
-* 资金退回接口: client.FundTransRefund()
-* 资金授权冻结接口: client.FundAuthOrderFreeze()
-* 资金授权发码接口: client.FundAuthOrderVoucherCreate()
-* 线上资金授权冻结接口: client:FundAuthOrderAppFreeze()
-* 资金授权解冻接口: client.FundAuthOrderUnfreeze()
-* 资金授权操作查询接口: client.FundAuthOperationDetailQuery()
-* 现金红包无线支付接口: client.FundTransAppPay()
-* 换取授权访问令牌（获取access_token，user_id等信息）：client.SystemOauthToken()
-* 支付宝会员授权信息查询接口（App支付宝登录）：client.UserInfoShare()
-* 换取应用授权令牌（获取app_auth_token，auth_app_id，user_id等信息）：client.OpenAuthTokenApp()
-* 获取芝麻信用分：client.ZhimaCreditScoreGet()
-* 身份认证初始化服务：client.UserCertifyOpenInit()
-* 身份认证开始认证（获取认证链接）：client.UserCertifyOpenCertify()
-* 身份认证记录查询：client.UserCertifyOpenQuery()
-* 用户登陆授权：client.UserInfoAuth()
-* 支付宝商家账户当前余额查询：client.DataBillBalanceQuery()
-* 查询对账单下载地址：client.DataBillDownloadUrlQuery()
+* 网页&移动应用 - <font color='#027AFF' size='4'>支付API</font>
+    * 统一收单交易支付接口（商家扫用户付款码）：client.TradePay()
+    * 统一收单线下交易预创建（用户扫商品收款码）：client.TradePrecreate()
+    * APP支付接口2.0（APP支付）：client.TradeAppPay()
+    * 手机网站支付接口2.0（手机网站支付）：client.TradeWapPay()
+    * 统一收单下单并支付页面接口（电脑网站支付）：client.TradePagePay()
+    * 统一收单交易创建接口（小程序支付）：client.TradeCreate()
+    * 统一收单线下交易查询：client.TradeQuery()
+    * 统一收单交易撤销接口：client.TradeCancel()
+    * 统一收单交易关闭接口：client.TradeClose()
+    * 统一收单交易退款接口：client.TradeRefund()
+    * 统一收单退款页面接口：client.TradePageRefund()
+    * 统一收单交易退款查询：client.TradeFastPayRefundQuery()
+    * 统一收单交易结算接口：client.TradeOrderSettle()
+* 网页&移动应用 - <font color='#027AFF' size='4'>资金API</font>
+    * 单笔转账接口：client.FundTransUniTransfer()
+    * 查询转账订单接口: client.FundTransOrderQuery()
+    * 支付宝资金账户资产查询接口：client.FundAccountQuery()
+    * 转账业务单据查询接口：client.FundTransCommonQuery()
+    * 资金退回接口: client.FundTransRefund()
+    * 资金授权冻结接口: client.FundAuthOrderFreeze()
+    * 资金授权发码接口: client.FundAuthOrderVoucherCreate()
+    * 线上资金授权冻结接口: client:FundAuthOrderAppFreeze()
+    * 资金授权解冻接口: client.FundAuthOrderUnfreeze()
+    * 资金授权操作查询接口: client.FundAuthOperationDetailQuery()
+    * 资金授权撤销接口: client.FundAuthOperationCancel()
+    * 批次下单接口: client.FundBatchCreate()
+    * 批量转账关单接口: client.FundBatchClose()
+    * 批量转账明细查询接口: client.FundBatchDetailQuery()
+    * 现金红包无线支付接口: client.FundTransAppPay()
+* 网页&移动应用 - <font color='#027AFF' size='4'>会员API</font>
+    * 支付宝会员授权信息查询接口（App支付宝登录）：client.UserInfoShare()
+    * 身份认证初始化服务：client.UserCertifyOpenInit()
+    * 身份认证开始认证（获取认证链接）：client.UserCertifyOpenCertify()
+    * 身份认证记录查询：client.UserCertifyOpenQuery()
+* 网页&移动应用 - <font color='#027AFF' size='4'>工具类API</font>
+    * 用户登陆授权：client.UserInfoAuth()
+    * 换取授权访问令牌（获取access_token，user_id等信息）：client.SystemOauthToken()
+    * 换取应用授权令牌（获取app_auth_token，auth_app_id，user_id等信息）：client.OpenAuthTokenApp()
+* 网页&移动应用 - <font color='#027AFF' size='4'>芝麻信用API</font>
+    * 获取芝麻信用分：client.ZhimaCreditScoreGet()（失效）
+* 网页&移动应用 - <font color='#027AFF' size='4'>财务API</font>
+    * 支付宝商家账户当前余额查询：client.DataBillBalanceQuery()（失效）
+    * 查询对账单下载地址：client.DataBillDownloadUrlQuery()
 
 ### 支付宝公共API
 
@@ -237,7 +308,7 @@ if err != nil {
 }
 
 // 自动验签
-// 注意：未获取到微信平台公钥时，不要开启，请调用 client.GetPlatformCerts() 获取微信平台公钥（此接口只需调用一次，获取到微信平台公钥后自行保存）
+// 注意：未获取到微信平台公钥时，不要开启，请调用 client.GetPlatformCerts() 获取微信平台证书公钥
 //client.AutoVerifySign("微信平台公钥")
 
 // 打开Debug开关，输出日志
@@ -250,7 +321,7 @@ client.DebugSwitch = gopay.DebugOff
 
 > 注意：微信支付下单等操作可用沙箱环境测试是否成功，但真正支付时，请使用正式环境 isProd = true，不然会报错。
 
-> 微信证书现已支持二选一：只传 apiclient_cert.pem 和 apiclient_key.pem 或者只传 apiclient_cert.p12
+> 微信证书二选一：只传 apiclient_cert.pem 和 apiclient_key.pem 或者只传 apiclient_cert.p12
 
 ```go
 import (
@@ -274,19 +345,13 @@ client.DebugSwitch = gopay.DebugOn
 //    wechat.Other：其他国家
 client.SetCountry(wechat.China)
 
-// 添加微信证书 Path 路径
-//    certFilePath：apiclient_cert.pem 路径
-//    keyFilePath：apiclient_key.pem 路径
-//    pkcs12FilePath：apiclient_cert.p12 路径
-//    返回err
-client.AddCertFilePath()
+// 添加微信pem证书
+client.AddCertPemFilePath()
+client.AddCertPemFileContent()
 
-// 添加微信证书内容 Content
-//	certFileContent：apiclient_cert.pem 内容
-//	keyFileContent：apiclient_key.pem 内容
-//	pkcs12FileContent：apiclient_cert.p12 内容
-//	返回err
-client.AddCertFileContent()
+// 添加微信pkcs12证书
+client.AddCertPkcs12FilePath()
+client.AddCertPkcs12FileContent()
 ```
 
 * #### 支付宝
@@ -299,7 +364,7 @@ client.AddCertFileContent()
 
 ```go
 import (
-"github.com/iGoogle-ink/gopay/alipay"
+    "github.com/iGoogle-ink/gopay/alipay"
 )
 
 // 初始化支付宝客户端
@@ -421,13 +486,13 @@ wxRsp, err := client.UnifiedOrder(bm)
 wxRsp, err := client.Micropay(bm)
 wxRsp, err := client.QueryOrder(bm)
 wxRsp, err := client.CloseOrder(bm)
-wxRsp, err := client.Reverse(bm, "apiclient_cert.pem", "apiclient_key.pem", "apiclient_cert.p12")
-wxRsp, err := client.Refund(bm, "apiclient_cert.pem", "apiclient_key.pem", "apiclient_cert.p12")
+wxRsp, err := client.Reverse(bm)
+wxRsp, err := client.Refund(bm)
 wxRsp, err := client.QueryRefund(bm)
 wxRsp, err := client.DownloadBill(bm)
-wxRsp, err := client.DownloadFundFlow(bm, "apiclient_cert.pem", "apiclient_key.pem", "apiclient_cert.p12")
-wxRsp, err := client.BatchQueryComment(bm, "apiclient_cert.pem", "apiclient_key.pem", "apiclient_cert.p12")
-wxRsp, err := client.Transfer(bm, "apiclient_cert.pem", "apiclient_key.pem", "apiclient_cert.p12")
+wxRsp, err := client.DownloadFundFlow(bm)
+wxRsp, err := client.BatchQueryComment(bm)
+wxRsp, err := client.Transfer(bm)
 ```
 
 * #### 支付宝 client
@@ -796,9 +861,9 @@ xlog.Debug(*phone)
 
 ## 赞赏多少是您的心意，感谢！
 
-<font color='#0088ff'>微信：</font>
+<font color='#07C160' size='4'>微信：</font>
 <img width="200" height="200" src="https://raw.githubusercontent.com/iGoogle-ink/gopay/main/zanshang_wx.png"/>
-<font color='#0088ff'>支付宝：</font>
+<font color='#027AFF' size='4'>支付宝：</font>
 <img width="200" height="200" src="https://raw.githubusercontent.com/iGoogle-ink/gopay/main/zanshang_zfb.png"/>
 
 ## License
