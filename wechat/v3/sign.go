@@ -2,120 +2,230 @@ package wechat
 
 import (
 	"crypto"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
-	"crypto/x509"
 	"encoding/base64"
-	"encoding/pem"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"hash"
+	"strings"
 	"time"
 
-	"github.com/iGoogle-ink/gopay"
-	"github.com/iGoogle-ink/gopay/pkg/util"
+	"github.com/go-pay/crypto/xpem"
+	"github.com/go-pay/gopay"
+	"github.com/go-pay/util"
+	"github.com/go-pay/util/convert"
+	"github.com/go-pay/xlog"
 )
 
-// V3VerifySign 微信V3 版本验签
-//	wxPkContent：微信平台证书公钥内容，通过client.GetPlatformCerts() 获取
-func V3VerifySign(timestamp, nonce, signBody, sign, wxPkContent string) (err error) {
-	var (
-		block     *pem.Block
-		pubKey    *x509.Certificate
-		publicKey *rsa.PublicKey
-		ok        bool
-	)
+// Deprecated
+// 推荐使用 wechat.V3VerifySignByPK()
+func V3VerifySign(timestamp, nonce, signBody, sign, wxPubKeyContent string) (err error) {
+	publicKey, err := xpem.DecodePublicKey([]byte(wxPubKeyContent))
+	if err != nil {
+		return err
+	}
 	str := timestamp + "\n" + nonce + "\n" + signBody + "\n"
 	signBytes, _ := base64.StdEncoding.DecodeString(sign)
 
-	if block, _ = pem.Decode([]byte(wxPkContent)); block == nil {
-		return errors.New("parse wechat platform public key error")
-	}
-	if pubKey, err = x509.ParseCertificate(block.Bytes); err != nil {
-		return fmt.Errorf("x509.ParseCertificate：%+v", err)
-	}
-	if publicKey, ok = pubKey.PublicKey.(*rsa.PublicKey); !ok {
-		return errors.New("convert wechat platform public to rsa.PublicKey error")
-	}
 	h := sha256.New()
 	h.Write([]byte(str))
 	if err = rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, h.Sum(nil), signBytes); err != nil {
-		return fmt.Errorf("verify sign failed: %+v", err)
+		return fmt.Errorf("[%w]: %v", gopay.VerifySignatureErr, err)
 	}
 	return nil
 }
 
-// PaySignOfJSAPI 获取 JSAPI paySign
-//	文档：https://pay.weixin.qq.com/wiki/doc/apiv3/apis/chapter3_1_4.shtml
-func (c *ClientV3) PaySignOfJSAPI(prepayid string) (jsapi *JSAPIPayParams, err error) {
-	ts := util.Int642String(time.Now().Unix())
-	nonceStr := util.GetRandomString(32)
-	prepayId := "prepay_id=" + prepayid
+// 推荐直接开启自动同步验签功能
+// 微信V3 版本验签（同步）
+// wxPublicKey：微信平台证书公钥内容，通过 client.WxPublicKeyMap() 获取，然后根据 signInfo.HeaderSerial 获取相应的公钥
+func V3VerifySignByPK(timestamp, nonce, signBody, sign string, wxPublicKey *rsa.PublicKey) (err error) {
+	if wxPublicKey == nil || wxPublicKey.N == nil {
+		return fmt.Errorf("[%w]: %v", gopay.VerifySignatureErr, "wxPublicKey is nil")
+	}
+	str := timestamp + "\n" + nonce + "\n" + signBody + "\n"
+	signBytes, _ := base64.StdEncoding.DecodeString(sign)
 
-	_str := c.Appid + "\n" + ts + "\n" + nonceStr + "\n" + prepayId + "\n"
+	h := sha256.New()
+	h.Write([]byte(str))
+	if err = rsa.VerifyPKCS1v15(wxPublicKey, crypto.SHA256, h.Sum(nil), signBytes); err != nil {
+		return fmt.Errorf("[%w]: %v", gopay.VerifySignatureErr, err)
+	}
+	return nil
+}
+
+// PaySignOfJSAPI 获取 JSAPI 支付所需要的参数
+// 文档：https://pay.weixin.qq.com/docs/merchant/apis/jsapi-payment/jsapi-transfer-payment.html
+func (c *ClientV3) PaySignOfJSAPI(appid, prepayid string) (jsapi *JSAPIPayParams, err error) {
+	ts := convert.Int642String(time.Now().Unix())
+	nonceStr := util.RandomString(32)
+	pkg := "prepay_id=" + prepayid
+
+	_str := appid + "\n" + ts + "\n" + nonceStr + "\n" + pkg + "\n"
 	sign, err := c.rsaSign(_str)
 	if err != nil {
 		return nil, err
 	}
 
 	jsapi = &JSAPIPayParams{
-		AppId:     c.Appid,
+		AppId:     appid,
 		TimeStamp: ts,
 		NonceStr:  nonceStr,
-		Package:   prepayId,
+		Package:   pkg,
 		SignType:  SignTypeRSA,
 		PaySign:   sign,
 	}
 	return jsapi, nil
 }
 
-// PaySignOfApp 获取 App paySign
-//	文档：https://pay.weixin.qq.com/wiki/doc/apiv3/apis/chapter3_2_4.shtml
-func (c *ClientV3) PaySignOfApp(prepayid string) (app *AppPayParams, err error) {
-	ts := util.Int642String(time.Now().Unix())
-	nonceStr := util.GetRandomString(32)
-	prepayId := prepayid
+// PaySignOfApp 获取 App 支付所需要的参数
+// 文档：https://pay.weixin.qq.com/docs/merchant/apis/in-app-payment/app-transfer-payment.html
+func (c *ClientV3) PaySignOfApp(appid, prepayid string) (app *AppPayParams, err error) {
+	ts := convert.Int642String(time.Now().Unix())
+	nonceStr := util.RandomString(32)
 
-	_str := c.Appid + "\n" + ts + "\n" + nonceStr + "\n" + prepayId + "\n"
+	_str := appid + "\n" + ts + "\n" + nonceStr + "\n" + prepayid + "\n"
 	sign, err := c.rsaSign(_str)
 	if err != nil {
 		return nil, err
 	}
 
 	app = &AppPayParams{
-		Appid:     c.Appid,
+		Appid:     appid,
 		Partnerid: c.Mchid,
 		Prepayid:  prepayid,
 		Package:   "Sign=WXPay",
 		Noncestr:  nonceStr,
 		Timestamp: ts,
-		PaySign:   sign,
+		Sign:      sign,
 	}
 	return app, nil
 }
 
-// PaySignOfApplet 获取 小程序 paySign
-//	文档：https://pay.weixin.qq.com/wiki/doc/apiv3/apis/chapter3_5_4.shtml
-func (c *ClientV3) PaySignOfApplet(prepayid string) (applet *AppletParams, err error) {
-	ts := util.Int642String(time.Now().Unix())
-	nonceStr := util.GetRandomString(32)
-	prepayId := "prepay_id=" + prepayid
-
-	_str := c.Appid + "\n" + ts + "\n" + nonceStr + "\n" + prepayId + "\n"
-	sign, err := c.rsaSign(_str)
+// PaySignOfApplet 获取 小程序 支付所需要的参数
+// 文档：https://pay.weixin.qq.com/docs/merchant/apis/mini-program-payment/mini-transfer-payment.html
+func (c *ClientV3) PaySignOfApplet(appid, prepayid string) (applet *AppletParams, err error) {
+	jsapi, err := c.PaySignOfJSAPI(appid, prepayid)
 	if err != nil {
 		return nil, err
 	}
-
 	applet = &AppletParams{
-		AppId:     c.Appid,
-		TimeStamp: ts,
-		NonceStr:  nonceStr,
-		Package:   prepayId,
-		SignType:  SignTypeRSA,
-		PaySign:   sign,
+		AppId:     jsapi.AppId,
+		TimeStamp: jsapi.TimeStamp,
+		NonceStr:  jsapi.NonceStr,
+		Package:   jsapi.Package,
+		SignType:  jsapi.SignType,
+		PaySign:   jsapi.PaySign,
 	}
 	return applet, nil
+}
+
+// PaySignOfAppScore 获取 APP调起支付分 接口，query属性中的sign
+// 文档：https://pay.weixin.qq.com/docs/merchant/apis/weixin-pay-score/app-confirm.html
+func (c *ClientV3) PaySignOfAppScore(mchId, pkg string) (query *APPScoreQuery, err error) {
+	var (
+		buffer   strings.Builder
+		h        hash.Hash
+		ts       = convert.Int642String(time.Now().Unix())
+		nonceStr = util.RandomString(32)
+	)
+	buffer.WriteString("mch_id=")
+	buffer.WriteString(mchId)
+	buffer.WriteString("&nonce_str=")
+	buffer.WriteString(nonceStr)
+	buffer.WriteString("&package=")
+	buffer.WriteString(pkg)
+	buffer.WriteString("&sign_type=HMAC-SHA256")
+	buffer.WriteString("&timestamp=")
+	buffer.WriteString(ts)
+	buffer.WriteString("&key=")
+	buffer.WriteString(string(c.ApiV3Key))
+
+	h = hmac.New(sha256.New, c.ApiV3Key)
+	h.Write([]byte(buffer.String()))
+
+	query = &APPScoreQuery{
+		MchId:     mchId,
+		TimeStamp: ts,
+		NonceStr:  nonceStr,
+		Package:   pkg,
+		SignType:  "HMAC-SHA256",
+		Sign:      strings.ToUpper(hex.EncodeToString(h.Sum(nil))),
+	}
+	return query, nil
+}
+
+// PaySignOfJSAPIScore 获取 JSAPI调起支付分 接口，queryString属性中的sign
+// 文档：https://pay.weixin.qq.com/docs/merchant/apis/weixin-pay-score/jsapi-confirm.html
+func (c *ClientV3) PaySignOfJSAPIScore(mchId, pkg string) (queryString *JSAPIScoreQuery, err error) {
+	var (
+		buffer   strings.Builder
+		h        hash.Hash
+		ts       = convert.Int642String(time.Now().Unix())
+		nonceStr = util.RandomString(32)
+	)
+	buffer.WriteString("mch_id=")
+	buffer.WriteString(mchId)
+	buffer.WriteString("&nonce_str=")
+	buffer.WriteString(nonceStr)
+	buffer.WriteString("&package=")
+	buffer.WriteString(pkg)
+	buffer.WriteString("&sign_type=HMAC-SHA256")
+	buffer.WriteString("&timestamp=")
+	buffer.WriteString(ts)
+	buffer.WriteString("&key=")
+	buffer.WriteString(string(c.ApiV3Key))
+
+	h = hmac.New(sha256.New, c.ApiV3Key)
+	h.Write([]byte(buffer.String()))
+
+	queryString = &JSAPIScoreQuery{
+		MchId:     mchId,
+		TimeStamp: ts,
+		NonceStr:  nonceStr,
+		Package:   pkg,
+		SignType:  "HMAC-SHA256",
+		Sign:      strings.ToUpper(hex.EncodeToString(h.Sum(nil))),
+	}
+	return queryString, nil
+}
+
+// PaySignOfAppletScore 获取 小程序调起支付分 接口，extraData属性中的sign
+// 文档：https://pay.weixin.qq.com/docs/merchant/apis/weixin-pay-score/applets-confirm.html
+func (c *ClientV3) PaySignOfAppletScore(mchId, pkg string) (extraData *AppletScoreExtraData, err error) {
+	var (
+		buffer   strings.Builder
+		h        hash.Hash
+		ts       = convert.Int642String(time.Now().Unix())
+		nonceStr = util.RandomString(32)
+	)
+	buffer.WriteString("mch_id=")
+	buffer.WriteString(mchId)
+	buffer.WriteString("&nonce_str=")
+	buffer.WriteString(nonceStr)
+	buffer.WriteString("&package=")
+	buffer.WriteString(pkg)
+	buffer.WriteString("&sign_type=HMAC-SHA256")
+	buffer.WriteString("&timestamp=")
+	buffer.WriteString(ts)
+	buffer.WriteString("&key=")
+	buffer.WriteString(string(c.ApiV3Key))
+
+	h = hmac.New(sha256.New, c.ApiV3Key)
+	h.Write([]byte(buffer.String()))
+
+	extraData = &AppletScoreExtraData{
+		MchId:     mchId,
+		TimeStamp: ts,
+		NonceStr:  nonceStr,
+		Package:   pkg,
+		SignType:  "HMAC-SHA256",
+		Sign:      strings.ToUpper(hex.EncodeToString(h.Sum(nil))),
+	}
+	return extraData, nil
 }
 
 // v3 鉴权请求Header
@@ -123,13 +233,17 @@ func (c *ClientV3) authorization(method, path string, bm gopay.BodyMap) (string,
 	var (
 		jb        = ""
 		timestamp = time.Now().Unix()
-		nonceStr  = util.GetRandomString(32)
+		nonceStr  = util.RandomString(32)
 	)
 	if bm != nil {
 		jb = bm.JsonBody()
 	}
-	ts := util.Int642String(timestamp)
+	path = strings.TrimSuffix(path, "?")
+	ts := convert.Int642String(timestamp)
 	_str := method + "\n" + path + "\n" + ts + "\n" + nonceStr + "\n" + jb + "\n"
+	if c.DebugSwitch == gopay.DebugOn {
+		xlog.Debugf("Wechat_V3_SignString:\n%s", _str)
+	}
 	sign, err := c.rsaSign(_str)
 	if err != nil {
 		return "", err
@@ -145,41 +259,40 @@ func (c *ClientV3) rsaSign(str string) (string, error) {
 	h.Write([]byte(str))
 	result, err := rsa.SignPKCS1v15(rand.Reader, c.privateKey, crypto.SHA256, h.Sum(nil))
 	if err != nil {
-		return "", fmt.Errorf("rsa.SignPKCS1v15(),err:%+v", err)
+		return gopay.NULL, fmt.Errorf("[%w]: %+v", gopay.SignatureErr, err)
 	}
 	return base64.StdEncoding.EncodeToString(result), nil
 }
 
 // 自动同步请求验签
 func (c *ClientV3) verifySyncSign(si *SignInfo) (err error) {
-	if c.autoSign {
-		if si != nil {
-			var (
-				block     *pem.Block
-				pubKey    *x509.Certificate
-				publicKey *rsa.PublicKey
-				ok        bool
-			)
-			str := si.HeaderTimestamp + "\n" + si.HeaderNonce + "\n" + si.SignBody + "\n"
-			signBytes, _ := base64.StdEncoding.DecodeString(si.HeaderSignature)
-
-			if block, _ = pem.Decode(c.wxPkContent); block == nil {
-				return errors.New("parse wechat platform public key error")
-			}
-			if pubKey, err = x509.ParseCertificate(block.Bytes); err != nil {
-				return fmt.Errorf("x509.ParseCertificate：%+v", err)
-			}
-			if publicKey, ok = pubKey.PublicKey.(*rsa.PublicKey); !ok {
-				return errors.New("convert wechat platform public to rsa.PublicKey error")
-			}
-			h := sha256.New()
-			h.Write([]byte(str))
-			if err = rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, h.Sum(nil), signBytes); err != nil {
-				return fmt.Errorf("verify sign failed: %+v", err)
-			}
-			return nil
+	if !c.autoSign {
+		return nil
+	}
+	if si == nil {
+		return errors.New("auto verify sign, but SignInfo is nil")
+	}
+	c.rwMu.RLock()
+	wxPublicKey, exist := c.SnCertMap[si.HeaderSerial]
+	c.rwMu.RUnlock()
+	if !exist {
+		err = c.AutoVerifySign(false)
+		if err != nil {
+			return fmt.Errorf("[get all public key err]: %v", err)
 		}
-		return errors.New("auto verify sign, bug SignInfo is nil")
+		c.rwMu.RLock()
+		wxPublicKey, exist = c.SnCertMap[si.HeaderSerial]
+		c.rwMu.RUnlock()
+		if !exist {
+			return errors.New("auto verify sign, but public key not found")
+		}
+	}
+	str := si.HeaderTimestamp + "\n" + si.HeaderNonce + "\n" + si.SignBody + "\n"
+	signBytes, _ := base64.StdEncoding.DecodeString(si.HeaderSignature)
+	h := sha256.New()
+	h.Write([]byte(str))
+	if err = rsa.VerifyPKCS1v15(wxPublicKey, crypto.SHA256, h.Sum(nil), signBytes); err != nil {
+		return fmt.Errorf("[%w]: %v", gopay.VerifySignatureErr, err)
 	}
 	return nil
 }

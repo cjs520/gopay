@@ -1,6 +1,7 @@
 package wechat
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/md5"
 	"crypto/sha256"
@@ -11,20 +12,21 @@ import (
 	"errors"
 	"fmt"
 	"hash"
-	"io/ioutil"
+	"os"
 	"strings"
 
-	"github.com/iGoogle-ink/gopay"
-	"github.com/iGoogle-ink/gopay/pkg/util"
-	"github.com/iGoogle-ink/gopay/pkg/xhttp"
+	"github.com/go-pay/gopay"
+	"github.com/go-pay/util"
+	"github.com/go-pay/xhttp"
+	"github.com/go-pay/xlog"
 	"golang.org/x/crypto/pkcs12"
 )
 
 type Country int
 
 // 设置支付国家（默认：中国国内）
-//	根据支付地区情况设置国家
-//	country：<China：中国国内，China2：中国国内（冗灾方案），SoutheastAsia：东南亚，Other：其他国家>
+// 根据支付地区情况设置国家
+// country：<China：中国国内，China2：中国国内（冗灾方案），SoutheastAsia：东南亚，Other：其他国家>
 func (w *Client) SetCountry(country Country) (client *Client) {
 	w.mu.Lock()
 	switch country {
@@ -43,67 +45,48 @@ func (w *Client) SetCountry(country Country) (client *Client) {
 	return w
 }
 
-// Deprecated
-// 推荐使用 AddCertPemFileContent() 或 AddCertPemFilePath() 或 AddCertPkcs12FileContent() 或 AddCertPkcs12FilePath()
-// 添加微信证书路径或内容[]byte
-//	注意：只传pem证书或只传pkcs12证书均可，无需3个证书全传
-func (w *Client) AddCertFilePath(certFileContent, keyFileContent, pkcs12FileContent interface{}) (err error) {
-	return w.addCertFileContentOrPath(certFileContent, keyFileContent, pkcs12FileContent)
-}
-
 // 添加微信pem证书文件路径
-//	certFilePath：apiclient_cert.pem 文件路径
-//	keyFilePath：apiclient_key.pem 文件路径
+// certFilePath：apiclient_cert.pem 文件路径
+// keyFilePath：apiclient_key.pem 文件路径
 func (w *Client) AddCertPemFilePath(certFilePath, keyFilePath string) (err error) {
 	return w.addCertFileContentOrPath(certFilePath, keyFilePath, nil)
 }
 
 // 添加微信pkcs12证书文件路径
-//	pkcs12FilePath：apiclient_cert.p12 文件路径
+// pkcs12FilePath：apiclient_cert.p12 文件路径
 func (w *Client) AddCertPkcs12FilePath(pkcs12FilePath string) (err error) {
 	return w.addCertFileContentOrPath(nil, nil, pkcs12FilePath)
 }
 
 // 添加微信pem证书内容[]byte
-//	certFileContent：apiclient_cert.pem 证书内容[]byte
-//	keyFileContent：apiclient_key.pem 证书内容[]byte
+// certFileContent：apiclient_cert.pem 证书内容[]byte
+// keyFileContent：apiclient_key.pem 证书内容[]byte
 func (w *Client) AddCertPemFileContent(certFileContent, keyFileContent []byte) (err error) {
 	return w.addCertFileContentOrPath(certFileContent, keyFileContent, nil)
 }
 
 // 添加微信pkcs12证书内容[]byte
-//	p12FileContent：apiclient_cert.p12 证书内容[]byte
+// p12FileContent：apiclient_cert.p12 证书内容[]byte
 func (w *Client) AddCertPkcs12FileContent(p12FileContent []byte) (err error) {
 	return w.addCertFileContentOrPath(nil, nil, p12FileContent)
 }
 
 // 添加微信证书文件 Path 路径或证书内容
-//	注意：只传pem证书或只传pkcs12证书均可，无需3个证书全传
-func (w *Client) addCertFileContentOrPath(certFile, keyFile, pkcs12File interface{}) (err error) {
+// 注意：只传pem证书或只传pkcs12证书均可，无需3个证书全传
+func (w *Client) addCertFileContentOrPath(certFile, keyFile, pkcs12File any) (err error) {
 	if err = checkCertFilePathOrContent(certFile, keyFile, pkcs12File); err != nil {
 		return
 	}
-	var config *tls.Config
-	if config, err = w.addCertConfig(certFile, keyFile, pkcs12File); err != nil {
+	config, err := w.addCertConfig(certFile, keyFile, pkcs12File)
+	if err != nil {
 		return
 	}
-	w.mu.Lock()
-	w.certificate = &config.Certificates[0]
-	w.mu.Unlock()
+	w.tlsHc.SetTLSConfig(config)
 	return
 }
 
-func (w *Client) addCertConfig(certFile, keyFile, pkcs12File interface{}) (tlsConfig *tls.Config, err error) {
+func (w *Client) addCertConfig(certFile, keyFile, pkcs12File any) (tlsConfig *tls.Config, err error) {
 	if certFile == nil && keyFile == nil && pkcs12File == nil {
-		w.mu.RLock()
-		defer w.mu.RUnlock()
-		if w.certificate != nil {
-			tlsConfig = &tls.Config{
-				Certificates:       []tls.Certificate{*w.certificate},
-				InsecureSkipVerify: true,
-			}
-			return tlsConfig, nil
-		}
 		return nil, errors.New("cert parse failed or nil")
 	}
 
@@ -115,23 +98,23 @@ func (w *Client) addCertConfig(certFile, keyFile, pkcs12File interface{}) (tlsCo
 		if _, ok := certFile.([]byte); ok {
 			certPem = certFile.([]byte)
 		} else {
-			certPem, err = ioutil.ReadFile(certFile.(string))
+			certPem, err = os.ReadFile(certFile.(string))
 		}
 		if _, ok := keyFile.([]byte); ok {
 			keyPem = keyFile.([]byte)
 		} else {
-			keyPem, err = ioutil.ReadFile(keyFile.(string))
+			keyPem, err = os.ReadFile(keyFile.(string))
 		}
 		if err != nil {
-			return nil, fmt.Errorf("ioutil.ReadFile：%w", err)
+			return nil, fmt.Errorf("os.ReadFile：%w", err)
 		}
 	} else if pkcs12File != nil {
 		var pfxData []byte
 		if _, ok := pkcs12File.([]byte); ok {
 			pfxData = pkcs12File.([]byte)
 		} else {
-			if pfxData, err = ioutil.ReadFile(pkcs12File.(string)); err != nil {
-				return nil, fmt.Errorf("ioutil.ReadFile：%w", err)
+			if pfxData, err = os.ReadFile(pkcs12File.(string)); err != nil {
+				return nil, fmt.Errorf("os.ReadFile：%w", err)
 			}
 		}
 		blocks, err := pkcs12.ToPEM(pfxData, w.MchId)
@@ -156,20 +139,20 @@ func (w *Client) addCertConfig(certFile, keyFile, pkcs12File interface{}) (tlsCo
 	return nil, errors.New("cert files must all nil or all not nil")
 }
 
-func checkCertFilePathOrContent(certFile, keyFile, pkcs12File interface{}) error {
+func checkCertFilePathOrContent(certFile, keyFile, pkcs12File any) error {
 	if certFile == nil && keyFile == nil && pkcs12File == nil {
 		return nil
 	}
 	if certFile != nil && keyFile != nil {
-		files := map[string]interface{}{"certFile": certFile, "keyFile": keyFile}
+		files := map[string]any{"certFile": certFile, "keyFile": keyFile}
 		for varName, v := range files {
-			switch v.(type) {
+			switch v := v.(type) {
 			case string:
-				if v.(string) == util.NULL {
+				if v == gopay.NULL {
 					return fmt.Errorf("%s is empty", varName)
 				}
 			case []byte:
-				if len(v.([]byte)) == 0 {
+				if len(v) == 0 {
 					return fmt.Errorf("%s is empty", varName)
 				}
 			default:
@@ -178,13 +161,13 @@ func checkCertFilePathOrContent(certFile, keyFile, pkcs12File interface{}) error
 		}
 		return nil
 	} else if pkcs12File != nil {
-		switch pkcs12File.(type) {
+		switch pkcs12File := pkcs12File.(type) {
 		case string:
-			if pkcs12File.(string) == util.NULL {
+			if pkcs12File == gopay.NULL {
 				return errors.New("pkcs12File is empty")
 			}
 		case []byte:
-			if len(pkcs12File.([]byte)) == 0 {
+			if len(pkcs12File) == 0 {
 				return errors.New("pkcs12File is empty")
 			}
 		default:
@@ -197,7 +180,7 @@ func checkCertFilePathOrContent(certFile, keyFile, pkcs12File interface{}) error
 }
 
 // 获取微信支付正式环境Sign值
-func getReleaseSign(apiKey string, signType string, bm gopay.BodyMap) (sign string) {
+func GetReleaseSign(apiKey string, signType string, bm gopay.BodyMap) (sign string) {
 	var h hash.Hash
 	if signType == SignType_HMAC_SHA256 {
 		h = hmac.New(sha256.New, []byte(apiKey))
@@ -208,13 +191,34 @@ func getReleaseSign(apiKey string, signType string, bm gopay.BodyMap) (sign stri
 	return strings.ToUpper(hex.EncodeToString(h.Sum(nil)))
 }
 
+// 获取微信支付正式环境Sign值
+func (w *Client) getReleaseSign(apiKey string, signType string, bm gopay.BodyMap) (sign string) {
+	signParams := bm.EncodeWeChatSignParams(apiKey)
+	if w.DebugSwitch == gopay.DebugOn {
+		xlog.Debugf("Wechat_Request_SignStr: %s", signParams)
+	}
+	var h hash.Hash
+	if signType == SignType_HMAC_SHA256 {
+		h = w.sha256Hash
+	} else {
+		h = w.md5Hash
+	}
+	w.mu.Lock()
+	defer func() {
+		h.Reset()
+		w.mu.Unlock()
+	}()
+	h.Write([]byte(signParams))
+	return strings.ToUpper(hex.EncodeToString(h.Sum(nil)))
+}
+
 // 获取微信支付沙箱环境Sign值
-func getSignBoxSign(mchId, apiKey string, bm gopay.BodyMap) (sign string, err error) {
+func GetSandBoxSign(ctx context.Context, mchId, apiKey string, bm gopay.BodyMap) (sign string, err error) {
 	var (
 		sandBoxApiKey string
 		h             hash.Hash
 	)
-	if sandBoxApiKey, err = getSanBoxKey(mchId, util.GetRandomString(32), apiKey, SignType_MD5); err != nil {
+	if sandBoxApiKey, err = getSanBoxKey(ctx, mchId, util.RandomString(32), apiKey, SignType_MD5); err != nil {
 		return
 	}
 	h = md5.New()
@@ -223,32 +227,51 @@ func getSignBoxSign(mchId, apiKey string, bm gopay.BodyMap) (sign string, err er
 	return
 }
 
+// 获取微信支付沙箱环境Sign值
+func (w *Client) getSandBoxSign(ctx context.Context, mchId, apiKey string, bm gopay.BodyMap) (sign string, err error) {
+	var (
+		sandBoxApiKey string
+		h             hash.Hash
+	)
+	if sandBoxApiKey, err = getSanBoxKey(ctx, mchId, util.RandomString(32), apiKey, SignType_MD5); err != nil {
+		return
+	}
+	h = md5.New()
+	signParams := bm.EncodeWeChatSignParams(sandBoxApiKey)
+	if w.DebugSwitch == gopay.DebugOn {
+		xlog.Debugf("Wechat_Request_SignStr: %s", signParams)
+	}
+	h.Write([]byte(signParams))
+	sign = strings.ToUpper(hex.EncodeToString(h.Sum(nil)))
+	return
+}
+
 // 从微信提供的接口获取：SandboxSignKey
-func getSanBoxKey(mchId, nonceStr, apiKey, signType string) (key string, err error) {
+func getSanBoxKey(ctx context.Context, mchId, nonceStr, apiKey, signType string) (key string, err error) {
 	bm := make(gopay.BodyMap)
 	bm.Set("mch_id", mchId)
 	bm.Set("nonce_str", nonceStr)
 	// 沙箱环境：获取沙箱环境ApiKey
-	if key, err = getSanBoxSignKey(mchId, nonceStr, getReleaseSign(apiKey, signType, bm)); err != nil {
+	if key, err = getSanBoxSignKey(ctx, mchId, nonceStr, GetReleaseSign(apiKey, signType, bm)); err != nil {
 		return
 	}
 	return
 }
 
 // 从微信提供的接口获取：SandboxSignKey
-func getSanBoxSignKey(mchId, nonceStr, sign string) (key string, err error) {
+func getSanBoxSignKey(ctx context.Context, mchId, nonceStr, sign string) (key string, err error) {
 	reqs := make(gopay.BodyMap)
 	reqs.Set("mch_id", mchId)
 	reqs.Set("nonce_str", nonceStr)
 	reqs.Set("sign", sign)
 
 	keyResponse := new(getSignKeyResponse)
-	_, errs := xhttp.NewClient().Type(xhttp.TypeXML).Post(sandboxGetSignKey).SendString(GenerateXml(reqs)).EndStruct(keyResponse)
-	if len(errs) > 0 {
-		return util.NULL, errs[0]
+	_, err = xhttp.NewClient().Req(xhttp.TypeXML).Post(sandboxGetSignKey).SendString(GenerateXml(reqs)).EndStruct(ctx, keyResponse)
+	if err != nil {
+		return gopay.NULL, err
 	}
 	if keyResponse.ReturnCode == "FAIL" {
-		return util.NULL, errors.New(keyResponse.ReturnMsg)
+		return gopay.NULL, errors.New(keyResponse.ReturnMsg)
 	}
 	return keyResponse.SandboxSignkey, nil
 }
@@ -257,7 +280,7 @@ func getSanBoxSignKey(mchId, nonceStr, sign string) (key string, err error) {
 func GenerateXml(bm gopay.BodyMap) (reqXml string) {
 	bs, err := xml.Marshal(bm)
 	if err != nil {
-		return util.NULL
+		return gopay.NULL
 	}
 	return string(bs)
 }

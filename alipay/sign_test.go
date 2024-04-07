@@ -1,18 +1,19 @@
 package alipay
 
 import (
-	"io/ioutil"
+	"os"
 	"testing"
 
-	"github.com/iGoogle-ink/gopay"
-	"github.com/iGoogle-ink/gopay/pkg/xlog"
+	"github.com/go-pay/crypto/xrsa"
+	"github.com/go-pay/gopay"
+	"github.com/go-pay/xlog"
 )
 
 func TestSyncVerifySign(t *testing.T) {
 	signData := `{"code":"10000","msg":"Success","buyer_logon_id":"854***@qq.com","buyer_pay_amount":"0.01","buyer_user_id":"2088102363632794","fund_bill_list":[{"amount":"0.01","fund_channel":"PCREDIT"}],"gmt_payment":"2019-08-29 20:14:05","invoice_amount":"0.01","out_trade_no":"GZ201901301040361012","point_amount":"0.00","receipt_amount":"0.01","total_amount":"0.01","trade_no":"2019082922001432790585537960"}`
 	sign := "bk3SzX0CZRI811IJioS2XKQHcgMixUT8mYyGQj+vcOAQas7GIYi6LpykqqSc3m7+yvqoG0TdX/c2JjYnpw/J53JxtC2IC4vsLuIPIgghVo5qafsfSxEJ22w20RZDatI2dYqFVcj8Jp+4aesQ8zMMNw7cX9NLyk7kw3DecYeyQp+zrZMueZPqLh88Z+54G+e6QuSU++0ouqQVd4PkpPqy6YI+8MdMUX4Ve0jOQxMmYH8BC6n5ZsTH/uEaLEtzYVZdSw/xdSQ7K1SH73aEH8XbRYx6rL7RkKksrdvhezX+ThDjQ+fTWjvNFrGcg3fmqXRy2elvoalu+BQmqlkWWjEJYA=="
-	aliPayPublicKey := "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAp8gueNlkbiDidz6FBQEBpqoRgH8h7JtsPtYW0nzAqy1MME4mFnDSMfSKlreUomS3a55gmBopL1eF4/Km/dEnaL5tCY9+24SKn1D4iyls+lvz/ZjvUjVwxoUYBh8kkcxMZSDeDz8//o+9qZTrICVP2a4sBB8T0XmU4gxfw8FsmtoomBH1nLk3AO7wgRN2a3+SRSAmxrhIGDmF1lljSlhY32eJpJ2TZQKaWNW+7yDBU/0Wt3kQVY84vr14yYagnSCiIfqyVFqePayRtmVJDr5qvSXr51tdqs2zKZCu+26X7JAF4BSsaq4gmY5DmDTm4TohCnBduI1+bPGD+igVmtl05wIDAQAB"
-	pKey := FormatPublicKey(aliPayPublicKey)
+	alipayPublicKey := "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAp8gueNlkbiDidz6FBQEBpqoRgH8h7JtsPtYW0nzAqy1MME4mFnDSMfSKlreUomS3a55gmBopL1eF4/Km/dEnaL5tCY9+24SKn1D4iyls+lvz/ZjvUjVwxoUYBh8kkcxMZSDeDz8//o+9qZTrICVP2a4sBB8T0XmU4gxfw8FsmtoomBH1nLk3AO7wgRN2a3+SRSAmxrhIGDmF1lljSlhY32eJpJ2TZQKaWNW+7yDBU/0Wt3kQVY84vr14yYagnSCiIfqyVFqePayRtmVJDr5qvSXr51tdqs2zKZCu+26X7JAF4BSsaq4gmY5DmDTm4TohCnBduI1+bPGD+igVmtl05wIDAQAB"
+	pKey := xrsa.FormatAlipayPublicKey(alipayPublicKey)
 	err := verifySign(signData, sign, RSA2, pKey)
 	if err != nil {
 		xlog.Errorf("verifySign(),error:%+v", err)
@@ -82,14 +83,15 @@ func TestVerifySignWithCert(t *testing.T) {
 	bm.Set("seller_id", "2088102119685838")
 	bm.Set("notify_id", "4a91b7a78a503640467525113fb7d8bg8e")
 	// filePath
-	filepath := "/cert/alipayCertPublicKey_RSA2.crt"
+	filepath := "/cert/alipayPublicCert.crt"
 	ok, err := VerifySignWithCert(filepath, bm)
 	if err != nil {
 		xlog.Errorf("VerifySignWithCert(%+v),error:%+v", bm, err)
 		return
 	}
+	xlog.Debug("VerifySignWithCert", "OK:", ok)
 	// fileByte
-	bts, err := ioutil.ReadFile(filepath)
+	bts, err := os.ReadFile(filepath)
 	if err != nil {
 		xlog.Errorf("VerifySignWithCert(%+v),error:%+v", bm, err)
 		return
@@ -99,24 +101,24 @@ func TestVerifySignWithCert(t *testing.T) {
 		xlog.Errorf("VerifySignWithCert(%+v),error:%+v", bm, err)
 		return
 	}
-	xlog.Debug("OK:", ok)
+	xlog.Debug("VerifySignWithCert", "OK:", ok)
 }
 
 func TestGetCertSN(t *testing.T) {
-	sn, err := GetCertSN("cert/alipayCertPublicKey_RSA2.crt")
+	sn, err := GetCertSN("cert/alipayPublicCert.crt")
 	if err != nil {
 		xlog.Errorf("GetCertSN(),error:%+v", err)
 		return
 	}
 	xlog.Debug(sn)
-	pubKeyPath := "cert/appCertPublicKey.crt"
+	pubKeyPath := "cert/appPublicCert.crt"
 	sn, err = GetCertSN(pubKeyPath)
 	if err != nil {
 		xlog.Errorf("GetCertSN(),error:%+v", err)
 		return
 	}
 	xlog.Debug(sn)
-	bts, _ := ioutil.ReadFile(pubKeyPath)
+	bts, _ := os.ReadFile(pubKeyPath)
 	sn, err = GetCertSN(bts)
 	if err != nil {
 		xlog.Errorf("GetCertSN(),error:%+v", err)
@@ -130,7 +132,7 @@ func TestGetCertSN(t *testing.T) {
 		return
 	}
 	xlog.Debug(sn)
-	bts, _ = ioutil.ReadFile(rootCrtPath)
+	bts, _ = os.ReadFile(rootCrtPath)
 	sn, err = GetRootCertSN(bts)
 	if err != nil {
 		xlog.Errorf("GetCertSN(),error:%+v", err)

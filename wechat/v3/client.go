@@ -1,136 +1,87 @@
 package wechat
 
 import (
+	"context"
 	"crypto/rsa"
-	"crypto/x509"
-	"encoding/json"
-	"encoding/pem"
-	"errors"
-	"fmt"
-	"net/http"
 	"sync"
 
-	"github.com/iGoogle-ink/gopay"
-	"github.com/iGoogle-ink/gopay/pkg/xhttp"
-	"github.com/iGoogle-ink/gopay/pkg/xlog"
+	"github.com/go-pay/crypto/xpem"
+	"github.com/go-pay/gopay"
+	"github.com/go-pay/xhttp"
 )
 
 // ClientV3 微信支付 V3
 type ClientV3 struct {
-	Appid       string
 	Mchid       string
+	ApiV3Key    []byte
 	SerialNo    string
-	apiV3Key    string
-	wxPkContent []byte
+	WxSerialNo  string
 	autoSign    bool
+	rwMu        sync.RWMutex
+	hc          *xhttp.Client
 	privateKey  *rsa.PrivateKey
+	wxPublicKey *rsa.PublicKey
+	ctx         context.Context
 	DebugSwitch gopay.DebugSwitch
-	rwlock      sync.RWMutex
+	SnCertMap   map[string]*rsa.PublicKey // key: serial_no
 }
 
 // NewClientV3 初始化微信客户端 V3
-//	appid：appid 或者服务商模式的 sp_appid
-//	mchid：商户ID 或者服务商模式的 sp_mchid
-// 	serialNo：商户证书的证书序列号
-//	apiV3Key：apiV3Key，商户平台获取
-//	pkContent：私钥 apiclient_key.pem 读取后的内容
-func NewClientV3(appid, mchid, serialNo, apiV3Key, pkContent string) (client *ClientV3, err error) {
-	var (
-		pk *rsa.PrivateKey
-		ok bool
-	)
-	block, _ := pem.Decode([]byte(pkContent))
-	if block == nil {
-		return nil, errors.New(fmt.Sprintf("pem.Decode(%s),error", pkContent))
+// mchid：商户ID 或者服务商模式的 sp_mchid
+// serialNo：商户API证书的证书序列号
+// apiV3Key：APIv3Key，商户平台获取
+// privateKey：商户API证书下载后，私钥 apiclient_key.pem 读取后的字符串内容
+func NewClientV3(mchid, serialNo, apiV3Key, privateKey string) (client *ClientV3, err error) {
+	if mchid == gopay.NULL || serialNo == gopay.NULL || apiV3Key == gopay.NULL || privateKey == gopay.NULL {
+		return nil, gopay.MissWechatInitParamErr
 	}
-	pk8, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	priKey, err := xpem.DecodePrivateKey([]byte(privateKey))
 	if err != nil {
-		pk, err = x509.ParsePKCS1PrivateKey(block.Bytes)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if pk == nil {
-		pk, ok = pk8.(*rsa.PrivateKey)
-		if !ok {
-			return nil, errors.New("parse PKCS8 key error")
-		}
+		return nil, err
 	}
 	client = &ClientV3{
-		Appid:       appid,
 		Mchid:       mchid,
 		SerialNo:    serialNo,
-		apiV3Key:    apiV3Key,
-		privateKey:  pk,
+		ApiV3Key:    []byte(apiV3Key),
+		privateKey:  priKey,
+		ctx:         context.Background(),
 		DebugSwitch: gopay.DebugOff,
+		hc:          xhttp.NewClient(),
 	}
 	return client, nil
 }
 
 // AutoVerifySign 开启请求完自动验签功能（默认不开启，推荐开启）
-//	注意：未获取到微信平台公钥时，不要开启，请调用 client.GetPlatformCerts() 获取微信平台证书公钥
-func (c *ClientV3) AutoVerifySign(wxPkContent string) {
-	if wxPkContent != "" {
-		c.wxPkContent = []byte(wxPkContent)
-		c.autoSign = true
+// 开启自动验签，自动开启每12小时一次轮询，请求最新证书操作
+func (c *ClientV3) AutoVerifySign(autoRefresh ...bool) (err error) {
+	wxSerialNo, certMap, err := c.GetAndSelectNewestCert()
+	if err != nil {
+		return err
 	}
+	if len(c.SnCertMap) <= 0 {
+		c.SnCertMap = make(map[string]*rsa.PublicKey)
+	}
+	for sn, cert := range certMap {
+		// decode cert
+		pubKey, err := xpem.DecodePublicKey([]byte(cert))
+		if err != nil {
+			return err
+		}
+		c.SnCertMap[sn] = pubKey
+	}
+	c.WxSerialNo = wxSerialNo
+	c.wxPublicKey = c.SnCertMap[wxSerialNo]
+	if len(autoRefresh) == 1 && !autoRefresh[0] {
+		return
+	}
+	c.autoSign = true
+	go c.autoCheckCertProc()
+	return
 }
 
-func (c *ClientV3) doProdPost(bm gopay.BodyMap, path, authorization string) (res *http.Response, si *SignInfo, bs []byte, err error) {
-	var url = v3BaseUrlCh + path
-
-	httpClient := xhttp.NewClient()
-	if c.DebugSwitch == gopay.DebugOn {
-		jb, _ := json.Marshal(bm)
-		xlog.Debugf("Wechat_V3_RequestBody: %s", jb)
-		xlog.Debugf("Wechat_V3_Authorization: %s", authorization)
+// SetBodySize 设置http response body size(MB)
+func (c *ClientV3) SetBodySize(sizeMB int) {
+	if sizeMB > 0 {
+		c.hc.SetBodySize(sizeMB)
 	}
-	httpClient.Header.Add(HeaderAuthorization, authorization)
-	httpClient.Header.Add("Accept", "*/*")
-	res, bs, errs := httpClient.Type(xhttp.TypeJSON).Post(url).SendBodyMap(bm).EndBytes()
-	if len(errs) > 0 {
-		return nil, nil, nil, errs[0]
-	}
-	si = &SignInfo{
-		HeaderTimestamp: res.Header.Get(HeaderTimestamp),
-		HeaderNonce:     res.Header.Get(HeaderNonce),
-		HeaderSignature: res.Header.Get(HeaderSignature),
-		HeaderSerial:    res.Header.Get(HeaderSerial),
-		SignBody:        string(bs),
-	}
-	if c.DebugSwitch == gopay.DebugOn {
-		xlog.Debugf("Wechat_Response: %d > %s", res.StatusCode, string(bs))
-		xlog.Debugf("Wechat_Headers: %#v", res.Header)
-		xlog.Debugf("Wechat_SignInfo: %#v", si)
-	}
-	return res, si, bs, nil
-}
-
-func (c *ClientV3) doProdGet(uri, authorization string) (res *http.Response, si *SignInfo, bs []byte, err error) {
-	var url = v3BaseUrlCh + uri
-
-	httpClient := xhttp.NewClient()
-	if c.DebugSwitch == gopay.DebugOn {
-		xlog.Debugf("Wechat_V3_Url: %s", url)
-		xlog.Debugf("Wechat_V3_Authorization: %s", authorization)
-	}
-	httpClient.Header.Add(HeaderAuthorization, authorization)
-	httpClient.Header.Add("Accept", "*/*")
-	res, bs, errs := httpClient.Type(xhttp.TypeJSON).Get(url).EndBytes()
-	if len(errs) > 0 {
-		return nil, nil, nil, errs[0]
-	}
-	si = &SignInfo{
-		HeaderTimestamp: res.Header.Get(HeaderTimestamp),
-		HeaderNonce:     res.Header.Get(HeaderNonce),
-		HeaderSignature: res.Header.Get(HeaderSignature),
-		HeaderSerial:    res.Header.Get(HeaderSerial),
-		SignBody:        string(bs),
-	}
-	if c.DebugSwitch == gopay.DebugOn {
-		xlog.Debugf("Wechat_Response: %d > %s", res.StatusCode, string(bs))
-		xlog.Debugf("Wechat_Headers: %#v", res.Header)
-		xlog.Debugf("Wechat_SignInfo: %#v", si)
-	}
-	return res, si, bs, nil
 }

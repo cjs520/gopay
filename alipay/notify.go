@@ -6,15 +6,14 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/iGoogle-ink/gopay"
-	"github.com/iGoogle-ink/gopay/pkg/util"
+	"github.com/go-pay/gopay"
 )
 
 // 解析支付宝支付异步通知的参数到BodyMap
-//	req：*http.Request
-//	返回参数bm：Notify请求的参数
-//	返回参数err：错误信息
-//	文档：https://opendocs.alipay.com/open/203/105286
+// req：*http.Request
+// 返回参数bm：Notify请求的参数
+// 返回参数err：错误信息
+// 文档：https://opendocs.alipay.com/open/203/105286
 func ParseNotifyToBodyMap(req *http.Request) (bm gopay.BodyMap, err error) {
 	if err = req.ParseForm(); err != nil {
 		return nil, err
@@ -29,11 +28,11 @@ func ParseNotifyToBodyMap(req *http.Request) (bm gopay.BodyMap, err error) {
 	return
 }
 
-// 通过 url.Values 解析支付宝支付异步通知的参数到Struct
-//	value：url.Values
-//	返回参数notifyReq：Notify请求的参数
-//	返回参数err：错误信息
-//	文档：https://opendocs.alipay.com/open/203/105286
+// 通过 url.Values 解析支付宝支付异步通知的参数到BodyMap
+// value：url.Values
+// 返回参数notifyReq：Notify请求的参数
+// 返回参数err：错误信息
+// 文档：https://opendocs.alipay.com/open/203/105286
 func ParseNotifyByURLValues(value url.Values) (bm gopay.BodyMap, err error) {
 	bm = make(gopay.BodyMap, len(value)+1)
 	for k, v := range value {
@@ -45,11 +44,12 @@ func ParseNotifyByURLValues(value url.Values) (bm gopay.BodyMap, err error) {
 }
 
 // Deprecated
+// 推荐使用 ParseNotifyToBodyMap()，以防阿里云通知参数变动，NotifyRequest 无法解析。
 // 解析支付宝支付异步通知的参数到Struct
-//	req：*http.Request
-//	返回参数notifyReq：Notify请求的参数
-//	返回参数err：错误信息
-//	文档：https://opendocs.alipay.com/open/203/105286
+// req：*http.Request
+// 返回参数notifyReq：Notify请求的参数
+// 返回参数err：错误信息
+// 文档：https://opendocs.alipay.com/open/203/105286
 func ParseNotifyResult(req *http.Request) (notifyReq *NotifyRequest, err error) {
 	notifyReq = new(NotifyRequest)
 	if err = req.ParseForm(); err != nil {
@@ -87,10 +87,10 @@ func ParseNotifyResult(req *http.Request) (notifyReq *NotifyRequest, err error) 
 	notifyReq.PassbackParams = req.Form.Get("passback_params")
 
 	billList := req.Form.Get("fund_bill_list")
-	if billList != util.NULL {
+	if billList != gopay.NULL {
 		bills := make([]*FundBillListInfo, 0)
 		if err = json.Unmarshal([]byte(billList), &bills); err != nil {
-			return nil, fmt.Errorf(`"fund_bill_list" xml.Unmarshal(%s)：%w`, billList, err)
+			return nil, fmt.Errorf(`"fund_bill_list" json.Unmarshal(%s)：%w`, billList, err)
 		}
 		notifyReq.FundBillList = bills
 	} else {
@@ -98,10 +98,10 @@ func ParseNotifyResult(req *http.Request) (notifyReq *NotifyRequest, err error) 
 	}
 
 	detailList := req.Form.Get("voucher_detail_list")
-	if detailList != util.NULL {
-		details := make([]*VoucherDetailListInfo, 0)
+	if detailList != gopay.NULL {
+		details := make([]*NotifyVoucherDetail, 0)
 		if err = json.Unmarshal([]byte(detailList), &details); err != nil {
-			return nil, fmt.Errorf(`"voucher_detail_list" xml.Unmarshal(%s)：%w`, detailList, err)
+			return nil, fmt.Errorf(`"voucher_detail_list" json.Unmarshal(%s)：%w`, detailList, err)
 		}
 		notifyReq.VoucherDetailList = details
 	} else {
