@@ -16,9 +16,8 @@ import (
 	"strings"
 
 	"github.com/go-pay/gopay"
+	"github.com/go-pay/gopay/pkg/xhttp"
 	"github.com/go-pay/util"
-	"github.com/go-pay/xhttp"
-	"github.com/go-pay/xlog"
 	"golang.org/x/crypto/pkcs12"
 )
 
@@ -81,7 +80,7 @@ func (w *Client) addCertFileContentOrPath(certFile, keyFile, pkcs12File any) (er
 	if err != nil {
 		return
 	}
-	w.tlsHc.SetTLSConfig(config)
+	w.tlsHc.SetHttpTLSConfig(config)
 	return
 }
 
@@ -195,7 +194,7 @@ func GetReleaseSign(apiKey string, signType string, bm gopay.BodyMap) (sign stri
 func (w *Client) getReleaseSign(apiKey string, signType string, bm gopay.BodyMap) (sign string) {
 	signParams := bm.EncodeWeChatSignParams(apiKey)
 	if w.DebugSwitch == gopay.DebugOn {
-		xlog.Debugf("Wechat_Request_SignStr: %s", signParams)
+		w.logger.Debugf("Wechat_Request_SignStr: %s", signParams)
 	}
 	var h hash.Hash
 	if signType == SignType_HMAC_SHA256 {
@@ -239,7 +238,7 @@ func (w *Client) getSandBoxSign(ctx context.Context, mchId, apiKey string, bm go
 	h = md5.New()
 	signParams := bm.EncodeWeChatSignParams(sandBoxApiKey)
 	if w.DebugSwitch == gopay.DebugOn {
-		xlog.Debugf("Wechat_Request_SignStr: %s", signParams)
+		w.logger.Debugf("Wechat_Request_SignStr: %s", signParams)
 	}
 	h.Write([]byte(signParams))
 	sign = strings.ToUpper(hex.EncodeToString(h.Sum(nil)))

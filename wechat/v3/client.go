@@ -7,23 +7,26 @@ import (
 
 	"github.com/go-pay/crypto/xpem"
 	"github.com/go-pay/gopay"
-	"github.com/go-pay/xhttp"
+	"github.com/go-pay/gopay/pkg/xhttp"
+	"github.com/go-pay/xlog"
 )
 
 // ClientV3 微信支付 V3
 type ClientV3 struct {
-	Mchid       string
-	ApiV3Key    []byte
-	SerialNo    string
-	WxSerialNo  string
-	autoSign    bool
-	rwMu        sync.RWMutex
-	hc          *xhttp.Client
-	privateKey  *rsa.PrivateKey
-	wxPublicKey *rsa.PublicKey
-	ctx         context.Context
-	DebugSwitch gopay.DebugSwitch
-	SnCertMap   map[string]*rsa.PublicKey // key: serial_no
+	Mchid         string
+	ApiV3Key      []byte
+	SerialNo      string
+	WxSerialNo    string
+	autoSign      bool
+	rwMu          sync.RWMutex
+	hc            *xhttp.Client
+	privateKey    *rsa.PrivateKey
+	wxPublicKey   *rsa.PublicKey
+	ctx           context.Context
+	DebugSwitch   gopay.DebugSwitch
+	requestIdFunc xhttp.RequestIdHandler
+	logger        xlog.XLogger
+	SnCertMap     map[string]*rsa.PublicKey // key: serial_no
 }
 
 // NewClientV3 初始化微信客户端 V3
@@ -39,16 +42,26 @@ func NewClientV3(mchid, serialNo, apiV3Key, privateKey string) (client *ClientV3
 	if err != nil {
 		return nil, err
 	}
+	logger := xlog.NewLogger()
+	logger.SetLevel(xlog.DebugLevel)
 	client = &ClientV3{
-		Mchid:       mchid,
-		SerialNo:    serialNo,
-		ApiV3Key:    []byte(apiV3Key),
-		privateKey:  priKey,
-		ctx:         context.Background(),
-		DebugSwitch: gopay.DebugOff,
-		hc:          xhttp.NewClient(),
+		Mchid:         mchid,
+		SerialNo:      serialNo,
+		ApiV3Key:      []byte(apiV3Key),
+		privateKey:    priKey,
+		ctx:           context.Background(),
+		DebugSwitch:   gopay.DebugOff,
+		logger:        logger,
+		requestIdFunc: defaultRequestIdFunc,
+		hc:            xhttp.NewClient(),
 	}
 	return client, nil
+}
+
+func (c *ClientV3) SetRequestIdFunc(requestIdFunc xhttp.RequestIdHandler) {
+	if requestIdFunc != nil {
+		c.requestIdFunc = requestIdFunc
+	}
 }
 
 // AutoVerifySign 开启请求完自动验签功能（默认不开启，推荐开启）
@@ -83,5 +96,18 @@ func (c *ClientV3) AutoVerifySign(autoRefresh ...bool) (err error) {
 func (c *ClientV3) SetBodySize(sizeMB int) {
 	if sizeMB > 0 {
 		c.hc.SetBodySize(sizeMB)
+	}
+}
+
+// SetHttpClient 设置自定义的xhttp.Client
+func (c *ClientV3) SetHttpClient(client *xhttp.Client) {
+	if client != nil {
+		c.hc = client
+	}
+}
+
+func (c *ClientV3) SetLogger(logger xlog.XLogger) {
+	if logger != nil {
+		c.logger = logger
 	}
 }
